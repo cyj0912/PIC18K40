@@ -26,6 +26,7 @@ protected:
 private slots:
     void on_serialConnect_clicked();
     void on_actionOpen_Program_triggered();
+	void on_reopenButton_clicked();
     void on_enableLVP_clicked();
     void on_stopLVP_clicked();
     void on_downloadButton_clicked();
@@ -42,6 +43,7 @@ private:
     QSerialPort* serialPort;
     QHexEdit* hexEdit;
     QHexEdit* dbgHex;
+	QString fileName;
 
     unsigned int FlashSizeKB = 128;
     int RowSize = 128;

@@ -6,6 +6,7 @@
 #define TERAR 3
 #define TPINT 3
 
+//Big endian [0][1][2][3]
 void EncodeUInt16(uint16_t i, unsigned char o[]) {
   o[0] = i >> 8;
   o[1] = i;
@@ -73,14 +74,23 @@ void fill(int n) {
 }
 
 enum {
-  CMD_START_PROG = 0x40,
+  CMD_START_PROG = 0x40, //@
   CMD_END_PROG, //A
-  CMD_LATCH_DATA,
-  CMD_ERASE_ROW,
-  CMD_WRITE_ROW,
+  CMD_LATCH_DATA, //B
+  CMD_ERASE_ROW, //C
+  CMD_WRITE_ROW, //D
   CMD_ERASE_CHIP, //E
-  CMD_QUERYINFO,
-  CMD_WRITE_CONF, //L
+  CMD_QUERYINFO, //F
+  CMD_WRITE_CONF, //G
+  ICMD_LOAD_PC, //H
+  ICMD_BULK_ERASE, //I
+  ICMD_ROW_ERASE,
+  ICMD_READ_DATA_PCINC,
+  ICMD_READ_DATA,
+  ICMD_LOAD_DATA_PCINC,
+  ICMD_LOAD_DATA,
+  ICMD_INCREMENT_ADDRESS,
+  ICMD_INTERNALLY_TIMED_PROGRAM,
   CMD_OK = 0x20
 };
 
@@ -124,10 +134,6 @@ void loop() {
         fill(1);
         if (buff[0] != CMD_OK)
           break;
-        Serial.print("Latched@");
-        Serial.print(addr);
-        Serial.print("Size:");
-        Serial.print(len);
         Serial.write(RSP_OK);
         break;
       }
@@ -189,29 +195,20 @@ void loop() {
         ICSPSend(B11111110);
         PrintPayload();
       }
-      /*
-            Serial.println("@0x00");
-            ICSPSend(0x80);
-            SendPayload(0x00, 0x00, 0x00);
-            for (int i = 0; i < 64; i++) {
-              ICSPSend(0xFE);
-              PrintPayload();
-            }*/
-      Serial.println("@0x80");
+      Serial.println("@0x00");
       ICSPSend(0x80);
-      SendPayload(0x00, 0x00, 0x80);
+      SendPayload(0x00, 0x00, 0x00);
       for (int i = 0; i < 64; i++) {
         ICSPSend(0xFE);
         PrintPayload();
-      }/*
-  Serial.println("@0x100");
-  ICSPSend(0x80);
-  SendPayload(0x100);
-  for (int i = 0; i < 64; i++) {
-  ICSPSend(0xFE);
-  PrintPayload();
-  }*/
-
+      }
+      Serial.println("@0x1ff00");
+      ICSPSend(0x80);
+      SendPayload(0x1ff00);
+      for (int i = 0; i < 64; i++) {
+        ICSPSend(0xFE);
+        PrintPayload();
+      }
       Serial.write(RSP_OK);
       break;
     case CMD_WRITE_CONF:
@@ -229,6 +226,63 @@ void loop() {
       }
       Serial.write(RSP_OK);
       break;
+    case ICMD_LOAD_PC: {
+        fill(4);
+        uint32_t addr = DecodeUInt32(buff);
+        ICSPSend(0x80);
+        SendPayload(addr);
+        Serial.write(RSP_OK);
+        break;
+      }
+    case ICMD_BULK_ERASE: {
+        ICSPSend(0x18);
+        delay(TERAB);
+        Serial.write(RSP_OK);
+        break;
+      }
+    case ICMD_ROW_ERASE: {
+        ICSPSend(0xF0);
+        delay(TERAR);
+        Serial.write(RSP_OK);
+        break;
+      }
+    case ICMD_READ_DATA_PCINC: {
+        ICSPSend(0xFE);
+        PrintPayload();
+        Serial.write(RSP_OK);
+        break;
+      }
+    case ICMD_READ_DATA: {
+        ICSPSend(0xFC);
+        PrintPayload();
+        Serial.write(RSP_OK);
+        break;
+      }
+    case ICMD_LOAD_DATA_PCINC: {
+        fill(2);
+        ICSPSend(0x02);
+        SendPayload(0x00, buff[0], buff[1]);
+        Serial.write(RSP_OK);
+        break;
+      }
+    case ICMD_LOAD_DATA: {
+        fill(2);
+        ICSPSend(0x00);
+        SendPayload(0x00, buff[0], buff[1]);
+        Serial.write(RSP_OK);
+        break;
+      }
+    case ICMD_INCREMENT_ADDRESS: {
+        ICSPSend(0xF8);
+        Serial.write(RSP_OK);
+        break;
+      }
+    case ICMD_INTERNALLY_TIMED_PROGRAM: {
+        ICSPSend(0xE0);
+        delay(TPINT);
+        Serial.write(RSP_OK);
+        break;
+      }
     default:
       break;
   }

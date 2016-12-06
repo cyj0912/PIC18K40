@@ -39,6 +39,13 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="reopenButton">
+        <property name="text">
+         <string>Reopen</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="enableLVP">
         <property name="text">
          <string>Enable LVP</string>

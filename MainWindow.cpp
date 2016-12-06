@@ -55,11 +55,13 @@ MainWindow::~MainWindow()
 
 bool MainWindow::sendCommand(const QByteArray &cmd) {
     if(serialPort) {
+		serialPort->readAll();
         serialPort->write(cmd);
         serialPort->flush();
+		serialPort->waitForBytesWritten(1000);
 
         bool ret = true;
-        auto readData = serialPort->readAll();
+        auto readData = QByteArray();
         while (!readData.endsWith("a") && serialPort->waitForReadyRead(1000))
             readData.append(serialPort->readAll());
         if(!readData.endsWith("a"))
@@ -95,48 +97,53 @@ void MainWindow::on_serialConnect_clicked()
 
 void MainWindow::on_actionOpen_Program_triggered()
 {
-    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Program"), QString(), tr("Intel Hex Files (*.hex *.ihx)"));
-    std::ifstream ifProg;
-    ifProg.open(fileName.toLocal8Bit().data(), std::ifstream::in);
-    if(ifProg.good())
-    {
-        //C:\Users\cheny\OneDrive\Documents\MPLABXProjects\pic18test.X\dist\XC8_18F47K40\production
-        intelhex inthex;
-        ifProg >> inthex;
-        unsigned long sa, ea;
-        inthex.startAddress(&sa);
-        inthex.endAddress(&ea);
-        qDebug() << "Address: " << sa << " - " << ea;
+    fileName = QFileDialog::getOpenFileName(this, tr("Open Program"), QString(), tr("Intel Hex Files (*.hex *.ihx)"));
+	on_reopenButton_clicked();
+}
 
-        int ProgSize;
-        inthex.begin();
-        while(!inthex.endOfData() && inthex.currentAddress() < FlashSizeKB*1024) {
-            ProgSize = inthex.currentAddress();
-            inthex++;
-        }
-        ProgSize++;
-        qDebug() << "Size: " << ProgSize;
+void MainWindow::on_reopenButton_clicked()
+{
+	std::ifstream ifProg;
+	ifProg.open(fileName.toLocal8Bit().data(), std::ifstream::in);
+	if (ifProg.good())
+	{
+		//C:\Users\cheny\OneDrive\Documents\MPLABXProjects\pic18test.X\dist\XC8_18F47K40\production
+		intelhex inthex;
+		ifProg >> inthex;
+		unsigned long sa, ea;
+		inthex.startAddress(&sa);
+		inthex.endAddress(&ea);
+		qDebug() << "Address: " << sa << " - " << ea;
 
-        QByteArray programData;
-        for(int i = 0; i < ProgSize; i++) {
-            unsigned char d;
-            bool exist = inthex.getData(&d, i);
-            if(!exist) {
-                d = 0xFF;
-                qDebug() << i << " does not exist";
-            }
-            programData.append(d);
-        }
-        hexEdit->setData(programData);
+		int ProgSize;
+		inthex.begin();
+		while (!inthex.endOfData() && inthex.currentAddress() < FlashSizeKB * 1024) {
+			ProgSize = inthex.currentAddress();
+			inthex++;
+		}
+		ProgSize++;
+		qDebug() << "Size: " << ProgSize;
 
-        QByteArray confData;
-        for(int i = 0; i < 12; i++) {
-            unsigned char d;
-            inthex.getData(&d, 0x300000+i);
-            confData.append(d);
-        }
-        ui->confEdit->setData(confData);
-    }
+		QByteArray programData;
+		for (int i = 0; i < ProgSize; i++) {
+			unsigned char d;
+			bool exist = inthex.getData(&d, i);
+			if (!exist) {
+				d = 0xFF;
+				qDebug() << i << " does not exist";
+			}
+			programData.append(d);
+		}
+		hexEdit->setData(programData);
+
+		QByteArray confData;
+		for (int i = 0; i < 12; i++) {
+			unsigned char d;
+			inthex.getData(&d, 0x300000 + i);
+			confData.append(d);
+		}
+		ui->confEdit->setData(confData);
+	}
 }
 
 void MainWindow::on_enableLVP_clicked()
@@ -183,8 +190,32 @@ void MainWindow::on_downloadButton_clicked()
 
         auto wholeProgram = hexEdit->data();
         for(int s = 0; s < wholeProgram.length(); s += RowSize) {
+			segmentData.clear();
             bool haveSomething = false;
-            for(int addr = s; addr < min(s + RowSize, wholeProgram.length()); addr++) {
+			for(int addr = s; addr < min(s + RowSize, wholeProgram.length()); addr++)
+			{
+				segmentData.append(wholeProgram.at(addr));
+				if ((unsigned char)wholeProgram.at(addr) != 0xFF)
+					haveSomething = true;
+			}
+			if(haveSomething)
+			{
+				QByteArray latchDataCmd;
+				latchDataCmd.append(CMD_LATCH_DATA);
+				unsigned char temp[4];
+				EncodeUInt32(s, temp);
+				latchDataCmd.append(temp[0]);
+				latchDataCmd.append(temp[1]);
+				latchDataCmd.append(temp[2]);
+				latchDataCmd.append(temp[3]);
+				EncodeUInt16(segmentData.length(), temp);
+				latchDataCmd.append(temp[0]);
+				latchDataCmd.append(temp[1]);
+				latchDataCmd.append(segmentData);
+				latchDataCmd.append(CMD_OK);
+				if (!sendCommand(latchDataCmd)) return;
+			}
+            /*for(int addr = s; addr < min(s + RowSize, wholeProgram.length()); addr++) {
                 if((unsigned char)wholeProgram.at(addr) != 0xFF) {
                     if(segmentData.length() == 0)
                         segmentStart = addr;
@@ -230,7 +261,7 @@ void MainWindow::on_downloadButton_clicked()
                 if(!sendCommand(latchDataCmd)) return;
 
                 segmentData.clear();
-            }
+            }*/
 
             if(haveSomething) {
                 QByteArray cmd;
